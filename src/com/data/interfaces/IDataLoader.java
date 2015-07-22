@@ -1,5 +1,7 @@
 package com.data.interfaces;
 
+import com.graph.Graph;
+
 /**
  * interface for loading data
  * @author Jeff
@@ -16,7 +18,7 @@ public interface IDataLoader {
 	 * ... 
 	 * @param filePath
 	 */
-	void loadNodesWithPrior(String filePath);
+	void loadNodesWithPrior(String filePath,Graph g);
 	
 	
 	/**
@@ -28,6 +30,16 @@ public interface IDataLoader {
 	 * ... 
 	 * @param filePath
 	 */
-	void loadEdgesWithPrior(String filePath);
+	void loadEdgesWithPrior(String filePath,Graph g);
+	
+	/**
+	 * load node relevant probability based on feedback information
+	 * file format:
+	 * ID1 feedback
+	 * ID2 feedback
+	 * ID3 feedback
+	 * @param filePath
+	 */
+    public void loadNodeRelevantBasedonFeedback(String filePath,Graph g);
 
 }

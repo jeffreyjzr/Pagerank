@@ -1,13 +1,14 @@
-package com.pagerank;  
-import java.io.BufferedReader;  
-import java.io.BufferedWriter;  
-import java.io.File;  
-import java.io.FileReader;  
-import java.io.FileWriter;  
-import java.util.HashMap;
-import java.util.Hashtable;  
+package com.pagerank;   
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.HashMap; 
+import java.util.List;
 import java.util.Map;
 
+import com.common.HeapSort;
 import com.graph.Graph;
 
 /**
@@ -22,12 +23,18 @@ public class EMPageRankWithPrior {
 	Graph g;
 	// damping factor for pagerank
 	double damping = 0.85;
-	// iteration number
-	int iteration = 200;
+	// iteration number (maximum)
+	int maxIteration = 200;
 	// iteration number(minimum)
 	int minIteration = 5;
 	// threshold
 	double threshold = 0.000001;
+	
+	// top ranking number(for m-step)
+	int topNum = 5;
+	
+	// output path
+	String outputPath;
 	
 	// pagerank authority scores
     Map<String,Double>pr;   
@@ -58,15 +65,16 @@ public class EMPageRankWithPrior {
 		double typenum = g.getTypes().keySet().size();
 		for(String bID:g.getNodes().keySet()){
 			pr.put(bID, g.getNodes().get(bID));  
-	        prTmp.put(bID, 0.0);
+	        //
+			prTmp.put(bID, g.getNodes().get(bID));
 	        
 	        
 	        Map<Integer,Double> conMap = new HashMap<Integer,Double>();
 	        Map<Integer,Double> conMapTmp = new HashMap<Integer,Double>();
 	        
 	        for(int t:g.getTypes().keySet()){
-	        	conMap.put(t,1.0/typenum);
-	        	conMapTmp.put(t, 0/typenum);
+	        	conMap.put(t,0.0); // at first, the contribution for each type is zero
+	        	conMapTmp.put(t, 1.0/typenum);
 	        }
 	        ecn.put(bID, conMap);
 	        ecnTmp.put(bID, conMapTmp);
@@ -81,66 +89,117 @@ public class EMPageRankWithPrior {
 	
 	/**
 	 * rank method()
-	 * @param total
 	 */
-	public void iteration(int total){
+	public void iteration(){
 	    
 		// test if converge
-		double gap=1.0;
-		double previous = 0.0;
-		double current = 0.0;
+		double convergence=1.0;
 		// iterations
 		int iterator = 0;
-        while(iterator>=minIteration||iterator < 500||gap<threshold){
+		// output Edge Usefulness
+		ouputEdgeUsefulness(outputPath,iterator);
+        while(iterator<minIteration||(iterator < maxIteration &&convergence>threshold)){
         	// run em algorithm 
         	
         	// E Step
-        	e_step();
+        	convergence = e_step();
         	
         	// M Step
         	m_step();
-            //PageRank with prior
-        	pageRankWithPrior();
             
-            
-            
-            
-            gap = Math.abs(previous-current);
-            previous = current;
             iterator++;
-        }  
-	    
-	    
+            // output Edge Usefulness
+        	ouputEdgeUsefulness(outputPath,iterator);
+        	
+        	//System.out.println(iterator);
+        } 
 	}
 	
 	
-	
-	
-	
-	
-	public void e_step(){
+	/**
+	 * e step
+	 */
+	private double  e_step(){
 		// PageRank with Prior
 		pageRankWithPrior();
 		// normalize
-		normalization();
+		double convergence = normalization();
 		// calculate each edge type contribution to the node
 		calEdgeContribution();
+		
+		return convergence;
 		
 		
 	}
 	
-	
-	public void m_step(){
+	/**
+	 * m step
+	 */
+	private void m_step(){
+		//ranking nodes using pagerank value
+		List<String> nodeRanking = rankingNodes();
+		
 		//update edge usefulness
+		updateUsefulness(nodeRanking);
+	}
+	
+	
+	/**
+	 * ranking nodes based on pagerank value
+	 * return top n nodes 
+	 * @return
+	 */
+	private List<String> rankingNodes(){
+		List<String>nodeRanking = new ArrayList<String>();
+		// total node number
+		int num = pr.keySet().size();
+		String ids[] = new String[num];
+		double values[] = new double[num];
+		int n = 0;
+		for(String id:pr.keySet()){
+			ids[n]= id;
+			values[n]=pr.get(id);
+			n++;
+		}
 		
+		HeapSort hs = new HeapSort();
+		hs.heapSort(values, ids);
+		for(int i = ids.length-1;i>=0&&i>=ids.length-topNum;i--){
+			nodeRanking.add(ids[i]);
+		}
+		return nodeRanking;
+	}
+	
+	/**
+	 * update edge usefulness
+	 * @param nodeRanking
+	 */
+	private void updateUsefulness(List<String> nodeRanking){
+		double all_type = 0.0;
+		//update edge usefulness
+		for(int type:eu.keySet()){
+			//for each type
+			double type_total = 0.0;
+			for(String node:nodeRanking){
+				if(g.getFeedbacks().get(node)!=null){
+					type_total += g.getFeedbacks().get(node)*ecn.get(node).get(type);
+				}
+			}
+			all_type +=type_total;
+			eu.put(type, type_total);
+		}
 		
+		for(int type:eu.keySet()){
+			double v = eu.get(type);
+			eu.put(type, v/all_type);
+		}
 	}
 	
 	
 	/**
 	 * pagerank with prior for each time step
 	 */
-	public void pageRankWithPrior(){
+	private void pageRankWithPrior(){
 		// PR score of current page  
 		double fatherRank = 0.0; 
 		// for each node in graph
@@ -161,20 +220,18 @@ public class EMPageRankWithPrior {
                 }
             }
         }
-        
         // pagerank with prior
         for(String bID:g.getNodes().keySet()){
         	double tmp =  (1-damping)*prTmp.get(bID)  + damping * g.getNodes().get(bID);
+        	prTmp.put(bID, pr.get(bID));
         	pr.put(bID,tmp);
-        	prTmp.put(bID, 0.0);
         }
-		
 	}
 	
 	/**
 	 * calculate each edge type contribution to the node
 	 */
-	public void calEdgeContribution(){
+	private void calEdgeContribution(){
 		// for each node in graph
         for(String bID:g.getNodes().keySet()){
         	// check if this node has any relation edges
@@ -192,12 +249,14 @@ public class EMPageRankWithPrior {
             		for(int t:ec4end.keySet()){
             			double tmp = ec4end.get(t);
                         ec4end.put(t,tmp+alpha*ec4begin.get(t));
+            			//ec4end.put(t,alpha*ec4begin.get(t));
             		}
             		
                     double weight = Double.parseDouble(infs[1]);
                     int edgeType = Integer.parseInt(infs[2]);
                     double tmp = ec4end.get(edgeType);
                     ec4end.put(edgeType, tmp+(1-alpha)*pr.get(bID)*weight);
+                    //ec4end.put(edgeType, (1-alpha)*pr.get(bID)*weight);
                     ecn.put(infs[0],ec4end);
                 }
             }
@@ -225,15 +284,45 @@ public class EMPageRankWithPrior {
 	
 	
 	// normalize the node score
-	public void normalization(){
+	private double normalization(){
+		double convergence = 0.0;
 		double sum = 0.0;
 		for(String id:pr.keySet()){
 			sum += pr.get(id);
         }
 		for(String id:pr.keySet()){
 			double tmp = pr.get(id);
-			pr.put(id, tmp/sum);
+			double finalv= tmp/sum;
+			convergence += Math.abs(finalv-prTmp.get(id));
+			pr.put(id, finalv);
+			prTmp.put(id, finalv);
         }
+		return convergence;
+	}
+	
+	
+	
+	/**
+	 * output all the edge usefulness trend
+	 * @param outputPath
+	 * @param iteration
+	 */
+	private void ouputEdgeUsefulness(String outputPath,int iteration){
+		try {
+			FileWriter fw;
+			fw = new FileWriter(outputPath + File.separator + "type_usefullness.csv", true);
+			PrintWriter pw = new PrintWriter(fw);
+			pw.print(iteration);
+			for(int i =1;i<=eu.keySet().size();i++){
+				pw.print(","+eu.get(i));
+			}
+			pw.println();
+			fw.close();
+			pw.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 
@@ -250,15 +339,28 @@ public class EMPageRankWithPrior {
 
 
 
-	public int getIteration() {
-		return iteration;
-	}
-
-
-	public  void setIteration(int iteration) {
-		this.iteration = iteration;
-	}
 	
+	
+	public double getDamping() {
+		return damping;
+	}
+
+
+	public void setDamping(double damping) {
+		this.damping = damping;
+	}
+
+
+	public int getMaxIteration() {
+		return maxIteration;
+	}
+
+
+	public void setMaxIteration(int maxIteration) {
+		this.maxIteration = maxIteration;
+	}
+
+
 	public double getThreshold() {
 		return threshold;
 	}
@@ -280,6 +382,25 @@ public class EMPageRankWithPrior {
 	public void setMinIteration(int minIteration) {
 		this.minIteration = minIteration;
 	}
-	
+
+
+	public int getTopNum() {
+		return topNum;
+	}
+
+
+	public void setTopNum(int topNum) {
+		this.topNum = topNum;
+	}
+
+
+	public String getOutputPath() {
+		return outputPath;
+	}
+
+
+	public void setOutputPath(String outputPath) {
+		this.outputPath = outputPath;
+	}
 	
 }

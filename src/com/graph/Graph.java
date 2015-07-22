@@ -26,6 +26,11 @@ public class Graph {
 	// key is typeID, value is true/false(boolean)
 	Map<Integer, Boolean> types = new HashMap<Integer, Boolean>();
 
+	// node relevant probability given feedback information store in a
+	// map(sigmoid function)
+	// key is nodeID, value is node relevant probability based on feedback information
+	Map<String, Double> feedbacks = new HashMap<String, Double>();
+
 	/**
 	 * add nodes to graph
 	 * 
@@ -57,6 +62,15 @@ public class Graph {
 		}
 		types.put(type, true);
 	}
+	
+	/**
+	 * add node relevant probability based on feedback information
+	 * @param ID
+	 * @param feedBack
+	 */
+	public void addNodeFeedback(String ID, double feedBack) {
+		feedbacks.put(ID, feedBack);
+	}
 
 	public Map<String, Map<Integer, String>> getEdges() {
 		return edges;
@@ -73,13 +87,21 @@ public class Graph {
 	public void setNodes(Map<String, Double> nodes) {
 		this.nodes = nodes;
 	}
-	
+
 	public Map<Integer, Boolean> getTypes() {
 		return types;
 	}
 
 	public void setTypes(Map<Integer, Boolean> types) {
 		this.types = types;
+	}
+
+	public Map<String, Double> getFeedbacks() {
+		return feedbacks;
+	}
+
+	public void setFeedbacks(Map<String, Double> feedbacks) {
+		this.feedbacks = feedbacks;
 	}
 
 }
